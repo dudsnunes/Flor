@@ -62,14 +62,14 @@
     const BAYER = [,
  ,
  ,
- ,
+      [15, 7, 13, 5]
     ];
 
     function lerp(a, b, t) {
       return [
         Math.floor(a[0] + (b[0] - a[0]) * t),
         Math.floor(a[1] + (b[1] - a[1]) * t),
-        Math.floor(a[2] + (b[2] - a[2]) * t),
+        Math.floor(a[2] + (b[2] - a[2]) * t)
       ];
     }
 
@@ -113,7 +113,6 @@
     }
     makeBackground();
 
-    // gerador determinístico simples para estrelas e grama
     let seed = 4;
     function rand() {
       seed = (seed * 1664525 + 1013904223) % 4294967296;
@@ -128,14 +127,14 @@
       STARS.push({
         x: randInt(2, W - 2),
         y: randInt(2, 120),
-        phase: rand() * 6.28,
+        phase: rand() * 6.28
       });
     }
 
     const grassColors = [
       "rgb(60, 150, 60)",
       "rgb(40, 120, 50)",
-      "rgb(90, 180, 70)",
+      "rgb(90, 180, 70)"
     ];
     const GRASS = [];
     for (let i = 0; i < 40; i++) {
@@ -143,7 +142,7 @@
         x: randInt(0, W),
         y: randInt(194, 232),
         h: randInt(3, 9),
-        col: grassColors[randInt(0, grassColors.length - 1)],
+        col: grassColors[randInt(0, grassColors.length - 1)]
       });
     }
 
@@ -163,7 +162,7 @@
           x: 0,
           y: 0,
           vx: 0,
-          vy: 0,
+          vy: 0
         });
       }
       pulled = 0;
@@ -320,7 +319,6 @@
         drawText("Mal me quer", NOT_COLOR, 18);
       }
 
-      // aviso sutil para recomeçar quando acabarem as pétalas
       if (pulled === petals.length) {
         ctx.font = "10px Consolas, 'Courier New', monospace";
         ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
