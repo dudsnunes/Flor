@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Bem me quer, mal me quer</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      background-color: #05071f;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      font-family: Consolas, "Courier New", monospace;
+    }
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.7);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="180" height="240"></canvas>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const W = 180;
+    const H = 240;
+    const N_PETALS = 12;
+    const CX = 90;
+    const CY = 108;
+    const STEM_BOTTOM = { x: 90, y: 208 };
+
+    const LOVES_COLOR = "#ff8fc0";
+    const NOT_COLOR = "#a9bcff";
+    const IDLE_COLOR = "#c0e024";
+
+    function resize() {
+      const scale = Math.max(
+        1,
+        Math.min((window.innerWidth * 0.92) / W, (window.innerHeight * 0.92) / H)
+      );
+      canvas.style.width = Math.floor(W * scale) + "px";
+      canvas.style.height = Math.floor(H * scale) + "px";
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // ---------- décor statique ----------
+    const BAYER = [,
+ ,
+ ,
+ ,
+    ];
+
+    function lerp(a, b, t) {
+      return [
+        Math.floor(a[0] + (b[0] - a[0]) * t),
+        Math.floor(a[1] + (b[1] - a[1]) * t),
+        Math.floor(a[2] + (b[2] - a[2]) * t),
+      ];
+    }
+
+    const bgCanvas = document.createElement("canvas");
+    bgCanvas.width = W;
+    bgCanvas.height = H;
+    const bgCtx = bgCanvas.getContext("2d");
+
+    function makeBackground() {
+      const top =;
+      const bottom =;
+      const bands = 7;
+
+      for (let y = 0; y < H; y++) {
+        const t = Math.min(1.0, y / (H * 0.8));
+        const v = t * bands;
+        const i = Math.floor(v);
+        const frac = v - i;
+        for (let x = 0; x < W; x++) {
+          const k = i + (frac > BAYER[y % 4][x % 4] / 16 ? 1 : 0);
+          const col = lerp(top, bottom, Math.min(k, bands) / bands);
+          bgCtx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+          bgCtx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      // colinas
+      for (let x = 0; x < W; x++) {
+        const y1 = Math.floor(172 + 9 * Math.sin(x * 0.035) + 5 * Math.sin(x * 0.09 + 1));
+        bgCtx.fillStyle = "rgb(28, 38, 110)";
+        bgCtx.fillRect(x, y1, 1, H - y1);
+
+        const y2 = Math.floor(190 + 4 * Math.sin(x * 0.06 + 2));
+        bgCtx.fillStyle = "rgb(20, 70, 50)";
+        bgCtx.fillRect(x, y2, 1, H - y2);
+      }
+
+      // chão
+      bgCtx.fillStyle = "rgb(30, 90, 40)";
+      bgCtx.fillRect(0, 200, W, H - 200);
+    }
+    makeBackground();
+
+    // gerador determinístico simples para estrelas e grama
+    let seed = 4;
+    function rand() {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed / 4294967296;
+    }
+    function randInt(min, max) {
+      return Math.floor(rand() * (max - min + 1)) + min;
+    }
+
+    const STARS = [];
+    for (let i = 0; i < 45; i++) {
+      STARS.push({
+        x: randInt(2, W - 2),
+        y: randInt(2, 120),
+        phase: rand() * 6.28,
+      });
+    }
+
+    const grassColors = [
+      "rgb(60, 150, 60)",
+      "rgb(40, 120, 50)",
+      "rgb(90, 180, 70)",
+    ];
+    const GRASS = [];
+    for (let i = 0; i < 40; i++) {
+      GRASS.push({
+        x: randInt(0, W),
+        y: randInt(194, 232),
+        h: randInt(3, 9),
+        col: grassColors[randInt(0, grassColors.length - 1)],
+      });
+    }
+
+    // ---------- lógica do jogo ----------
+    let petals = [];
+    let pulled = 0;
+
+    function resetGame() {
+      const options = [N_PETALS - 1, N_PETALS, N_PETALS + 1];
+      const count = options[Math.floor(Math.random() * options.length)];
+      petals = [];
+      for (let i = 0; i < count; i++) {
+        const angle = (2 * Math.PI * i) / count - Math.PI / 2;
+        petals.push({
+          angle,
+          falling: false,
+          x: 0,
+          y: 0,
+          vx: 0,
+          vy: 0,
+        });
+      }
+      pulled = 0;
+    }
+    resetGame();
+
+    function pullPetal() {
+      for (const p of petals) {
+        if (!p.falling) {
+          p.falling = true;
+          p.vx = (Math.random() - 0.5) * 36;
+          p.vy = -15 + Math.random() * 20;
+          pulled++;
+          break;
+        }
+      }
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      if (pulled >= petals.length) {
+        resetGame();
+      } else {
+        pullPetal();
+      }
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (pulled >= petals.length) {
+          resetGame();
+        } else {
+          pullPetal();
+        }
+      } else if (e.key === "r" || e.key === "R") {
+        resetGame();
+      }
+    });
+
+    function drawPetal(angle, ox = 0, oy = 0) {
+      const px = CX + ox + Math.cos(angle) * 20;
+      const py = CY + oy + Math.sin(angle) * 20;
+
+      ctx.save();
+      ctx.translate(Math.round(px), Math.round(py));
+      ctx.rotate(angle);
+
+      ctx.fillStyle = "rgb(235, 240, 255)";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 13, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "rgb(255, 255, 255)";
+      ctx.beginPath();
+      ctx.ellipse(-1, -0.5, 10, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawText(text, color, y) {
+      ctx.font = "bold 17px Consolas, 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+
+      ctx.fillStyle = "rgb(15, 15, 35)";
+      ctx.fillText(text, W / 2 + 1, y + 1);
+
+      ctx.fillStyle = color;
+      ctx.fillText(text, W / 2, y);
+    }
+
+    // ---------- loop principal ----------
+    let lastTime = performance.now();
+
+    function loop(now) {
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+      const t = now / 1000;
+
+      ctx.drawImage(bgCanvas, 0, 0);
+
+      // estrelas piscando
+      for (const s of STARS) {
+        const c = 180 + Math.floor(75 * Math.sin(t * 3 + s.phase));
+        ctx.fillStyle = `rgb(${c}, ${c}, 255)`;
+        ctx.fillRect(s.x, s.y, 1, 1);
+      }
+
+      // grama
+      for (const g of GRASS) {
+        const sway = Math.round(Math.sin(t * 2 + g.x * 0.1) * 1.5);
+        ctx.strokeStyle = g.col;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(g.x, g.y);
+        ctx.lineTo(g.x + sway, g.y - g.h);
+        ctx.stroke();
+      }
+
+      // caule e folhas
+      ctx.strokeStyle = "rgb(50, 140, 60)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(CX, CY);
+      ctx.lineTo(STEM_BOTTOM.x, STEM_BOTTOM.y);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgb(60, 160, 70)";
+      ctx.beginPath();
+      ctx.ellipse(CX - 9, CY + 49, 9, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.ellipse(CX + 9, CY + 59, 9, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // pétalas presas
+      for (const p of petals) {
+        if (!p.falling) {
+          drawPetal(p.angle);
+        }
+      }
+
+      // miolo da flor
+      ctx.fillStyle = "rgb(210, 130, 20)";
+      ctx.beginPath();
+      ctx.arc(CX, CY, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "rgb(255, 200, 40)";
+      ctx.beginPath();
+      ctx.arc(CX - 1, CY - 1, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // pétalas caindo
+      for (const p of petals) {
+        if (p.falling && p.y < H) {
+          p.x += p.vx * dt;
+          p.vy += 45 * dt;
+          p.y += p.vy * dt;
+          p.angle += 1.5 * dt;
+          drawPetal(p.angle, p.x, p.y);
+        }
+      }
+
+      // texto na tela
+      if (pulled === 0) {
+        drawText("Clique!", IDLE_COLOR, 18);
+      } else if (pulled % 2 === 1) {
+        drawText("Bem me quer", LOVES_COLOR, 18);
+      } else {
+        drawText("Mal me quer", NOT_COLOR, 18);
+      }
+
+      // aviso sutil para recomeçar quando acabarem as pétalas
+      if (pulled === petals.length) {
+        ctx.font = "10px Consolas, 'Courier New', monospace";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+        ctx.fillText("Toque ou R p/ reiniciar", W / 2, H - 14);
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
