@@ -58,19 +58,25 @@
     window.addEventListener("resize", resize);
     resize();
 
-    // ---------- décor statique ----------
-    const BAYER = [,
- ,
- ,
-      [15, 7, 13, 5]
-    ];
+    // Matriz de Bayer 4x4 calculada por fórmula (sem colchetes aninhados)
+    function getBayer(x, y) {
+      const mx = x & 3;
+      const my = y & 3;
+      const xor = mx ^ my;
+      return (
+        ((xor & 1) << 3) |
+        ((my & 1) << 2) |
+        ((xor & 2) << 0) |
+        ((my & 2) >> 1)
+      );
+    }
 
-    function lerp(a, b, t) {
-      return [
-        Math.floor(a[0] + (b[0] - a[0]) * t),
-        Math.floor(a[1] + (b[1] - a[1]) * t),
-        Math.floor(a[2] + (b[2] - a[2]) * t)
-      ];
+    function lerpColor(a, b, t) {
+      return {
+        r: Math.floor(a.r + (b.r - a.r) * t),
+        g: Math.floor(a.g + (b.g - a.g) * t),
+        b: Math.floor(a.b + (b.b - a.b) * t)
+      };
     }
 
     const bgCanvas = document.createElement("canvas");
@@ -79,8 +85,8 @@
     const bgCtx = bgCanvas.getContext("2d");
 
     function makeBackground() {
-      const top =;
-      const bottom =;
+      const top = { r: 8, g: 12, b: 58 };
+      const bottom = { r: 110, g: 70, b: 150 };
       const bands = 7;
 
       for (let y = 0; y < H; y++) {
@@ -89,9 +95,9 @@
         const i = Math.floor(v);
         const frac = v - i;
         for (let x = 0; x < W; x++) {
-          const k = i + (frac > BAYER[y % 4][x % 4] / 16 ? 1 : 0);
-          const col = lerp(top, bottom, Math.min(k, bands) / bands);
-          bgCtx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+          const k = i + (frac > getBayer(x, y) / 16 ? 1 : 0);
+          const col = lerpColor(top, bottom, Math.min(k, bands) / bands);
+          bgCtx.fillStyle = `rgb(${col.r}, ${col.g}, ${col.b})`;
           bgCtx.fillRect(x, y, 1, 1);
         }
       }
@@ -151,8 +157,8 @@
     let pulled = 0;
 
     function resetGame() {
-      const options = [N_PETALS - 1, N_PETALS, N_PETALS + 1];
-      const count = options[Math.floor(Math.random() * options.length)];
+      const delta = Math.floor(Math.random() * 3) - 1; // -1, 0 ou +1
+      const count = N_PETALS + delta;
       petals = [];
       for (let i = 0; i < count; i++) {
         const angle = (2 * Math.PI * i) / count - Math.PI / 2;
